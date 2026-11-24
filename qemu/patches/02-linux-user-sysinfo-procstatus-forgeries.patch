@@ -1,0 +1,66 @@
+--- a/linux-user/syscall.c
++++ b/linux-user/syscall.c
+@@ -8127,6 +8127,34 @@
+     return open_self_maps_1(cpu_env, fd, true);
+ }
+ 
++
++static int open_self_status(CPUArchState *cpu_env, int fd)
++{
++    /* TIZEN-PROCSTATUS: guest-shaped status so the CLR's memory
++       heuristics see the emulated process instead of host qemu. */
++    dprintf(fd, "Name:\tHomeSidebar.dll\n");
++    dprintf(fd, "Umask:\t0022\n");
++    dprintf(fd, "State:\tR (running)\n");
++    dprintf(fd, "Tgid:\t5000\nPid:\t5000\nPPid:\t1\n");
++    dprintf(fd, "TracerPid:\t0\n");
++    dprintf(fd, "Uid:\t5001\t5001\t5001\t5001\n");
++    dprintf(fd, "Gid:\t5001\t5001\t5001\t5001\n");
++    dprintf(fd, "FDSize:\t64\n");
++    dprintf(fd, "VmPeak:\t  412000 kB\n");
++    dprintf(fd, "VmSize:\t  389000 kB\n");
++    dprintf(fd, "VmLck:\t       0 kB\n");
++    dprintf(fd, "VmHWM:\t  330000 kB\n");
++    dprintf(fd, "VmRSS:\t  320000 kB\n");
++    dprintf(fd, "VmData:\t   90000 kB\n");
++    dprintf(fd, "VmStk:\t     136 kB\n");
++    dprintf(fd, "VmExe:\t   20000 kB\n");
++    dprintf(fd, "VmLib:\t  120000 kB\n");
++    dprintf(fd, "VmPTE:\t    1200 kB\n");
++    dprintf(fd, "VmSwap:\t       0 kB\n");
++    dprintf(fd, "Threads:\t10\n");
++    return 0;
++}
++
+ static int open_self_stat(CPUArchState *cpu_env, int fd)
+ {
+     CPUState *cpu = env_cpu(cpu_env);
+@@ -8322,6 +8350,7 @@
+         { "stat", open_self_stat, is_proc_myself },
+         { "auxv", open_self_auxv, is_proc_myself },
+         { "cmdline", open_self_cmdline, is_proc_myself },
++        { "status", open_self_status, is_proc_myself },
+ #if HOST_BIG_ENDIAN != TARGET_BIG_ENDIAN
+         { "/proc/net/route", open_net_route, is_proc },
+ #endif
+@@ -10817,6 +10846,20 @@
+         return ret;
+ #endif
+     case TARGET_NR_sysinfo:
++    {
++        /* TIZEN-SYSINFO: present a PontusM-shaped machine (2GB, 1.2GB free)
++           instead of host values, so guest memory sizing stays sane. */
++        struct sysinfo ginfo = {0};
++        sysinfo(&ginfo);
++        ginfo.totalram = 0x70000000 / ginfo.mem_unit;
++        ginfo.freeram  = 0x4b000000 / ginfo.mem_unit;
++        ginfo.procs = 180;
++        ginfo.totalswap = 0x38000000 / ginfo.mem_unit;
++        ginfo.freeswap  = 0x38000000 / ginfo.mem_unit;
++        if (copy_to_user(arg1, &ginfo, sizeof(struct target_sysinfo)))
++            return -TARGET_EFAULT;
++        return 0;
++    }
+         {
+             struct target_sysinfo *target_value;
+             struct sysinfo value;

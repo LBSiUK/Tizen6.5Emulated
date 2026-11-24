@@ -1,0 +1,16 @@
+--- a/target/arm/tcg/translate.c
++++ b/target/arm/tcg/translate.c
+@@ -9416,6 +9416,13 @@
+ static void thumb_tr_translate_insn(DisasContextBase *dcbase, CPUState *cpu)
+ {
+     DisasContext *dc = container_of(dcbase, DisasContext, base);
++    if (dc->base.pc_next & 1) {
++        /* TIZEN-ODDPC: CLR native-image code branches through thumb-tagged
++           pointers via lookup_and_goto_ptr without masking; align and continue. */
++        fprintf(stderr, "TIZEN-ODDPC aligned %llx\n",
++                (unsigned long long)dc->base.pc_next);
++        dc->base.pc_next &= ~(target_ulong)1;
++    }
+     CPUARMState *env = cpu_env(cpu);
+     uint32_t pc = dc->base.pc_next;
+     uint32_t insn;

@@ -1,0 +1,89 @@
+--- a/linux-user/mmap.c
++++ b/linux-user/mmap.c
+@@ -165,6 +165,8 @@
+ /* NOTE: all the constants are the HOST ones, but addresses are target. */
+ int target_mprotect(abi_ulong start, abi_ulong len, int target_prot)
+ {
++    return 0;  /* PATCHED: mprotect no-op for Tizen CLR emulation */
++
+     abi_ulong starts[3];
+     abi_ulong lens[3];
+     int prots[3];
+@@ -489,9 +491,11 @@
+ }
+ 
+ /* NOTE: all the constants are the HOST ones */
+-abi_long target_mmap(abi_ulong start, abi_ulong len, int target_prot,
+-                     int flags, int fd, off_t offset)
++static abi_long target_mmap_impl(abi_ulong start, abi_ulong len, int target_prot,
++                     int flags, int fd, off_t offset, int tizen_retry)
+ {
++    target_prot |= (PROT_READ | PROT_WRITE | PROT_EXEC);  /* PATCHED: all guest mappings RWX */
++
+     abi_ulong ret, last, real_start, real_last, retaddr, host_len;
+     abi_ulong passthrough_start = -1, passthrough_last = 0;
+     int page_flags;
+@@ -610,6 +614,16 @@
+         if (!(flags & MAP_ANONYMOUS)) {
+             p = mmap(g2h_untagged(start), len, host_prot,
+                      flags | MAP_FIXED, fd, host_offset);
++            if (p == MAP_FAILED && errno == EACCES && (flags & MAP_SHARED)) {
++                /* TIZEN-SHMAP-RETRY: Samsung maps read-only files SHARED|RW;
++                   retry private so in-memory patching still works. */
++                p = mmap(g2h_untagged(start), len, host_prot,
++                         (flags & ~MAP_SHARED) | MAP_PRIVATE | MAP_FIXED, fd, host_offset);
++                if (p != MAP_FAILED) {
++                    fprintf(stderr, "TIZEN-SHMAP: downgraded to PRIVATE at %llx\n",
++                            (unsigned long long)start);
++                }
++            }
+             if (p == MAP_FAILED) {
+                 munmap(g2h_untagged(start), host_len);
+                 goto fail;
+@@ -736,6 +750,17 @@
+ 
+             p = mmap(want_p, len1, target_to_host_prot(target_prot),
+                      flags, fd, offset1);
++            if (p == MAP_FAILED && errno == EACCES && (flags & MAP_SHARED)
++                && !(flags & MAP_ANONYMOUS)) {
++                /* TIZEN-SHMAP2: Samsung maps RO files SHARED|RW for in-place
++                   assembly patching; retry MAP_PRIVATE (CoW). */
++                p = mmap(want_p, len1, target_to_host_prot(target_prot),
++                         (flags & ~MAP_SHARED) | MAP_PRIVATE, fd, offset1);
++                if (p == want_p) {
++                    fprintf(stderr, "TIZEN-SHMAP2: private downgrade at %llx\n",
++                            (unsigned long long)real_start);
++                }
++            }
+             if (p != want_p) {
+                 if (p != MAP_FAILED) {
+                     munmap(p, len1);
+@@ -779,9 +804,28 @@
+     return start;
+ fail:
+     mmap_unlock();
++    if (errno == EACCES && (flags & MAP_SHARED) && !tizen_retry
++        && !(flags & MAP_ANONYMOUS) && fd >= 0) {
++        /* TIZEN-TOPRETRY: Samsung maps RO files SHARED|RW (assembly patching);
++           retry the whole syscall as MAP_PRIVATE. */
++        fprintf(stderr, "TIZEN-TOPRETRY: shared->private for start=%llx len=%llx fd=%d\n",
++                (unsigned long long)start, (unsigned long long)len, fd);
++        errno = 0;
++        return target_mmap_impl(start, len, target_prot,
++                                (flags & ~MAP_SHARED) | MAP_PRIVATE,
++                                fd, offset, 1);
++    }
+     return -1;
+ }
+ 
++
++abi_long target_mmap(abi_ulong start, abi_ulong len, int target_prot,
++                     int flags, int fd, off_t offset)
++{
++    return target_mmap_impl(start, len, target_prot, flags, fd, offset, 0);
++}
++
++
+ static int mmap_reserve_or_unmap(abi_ulong start, abi_ulong len)
+ {
+     abi_ulong real_start;
