@@ -128,3 +128,20 @@ for hours (pkgmgr-server idle-exits). Needs power-cycle. POST-REBOOT SEQUENCE (o
 - csfs now: context → NUIApp → wm_ready consumed → DALi binder+GL LOAD → crash in ld.so (pc 0x4100cd2c)
   right after libsecurity-privilege-manager/libboost_regex/libcrypt-2.30 load (NUI window creation path).
   NEXT: decode that loader fault (gdbstub on ld.so offset 0xcd2c; check ctor of privilege-manager).
+
+## SESSION-6 (22:30): STATIC_TLS DISCOVERY
+- THE ld.so segv at +0xcd2c DECODED: libs with DT_FLAGS STATIC_TLS (0x20) that are preloaded
+  TOGETHER crash ld.so 2.30's startup TLS/dtv math under qemu (null-base l_versions/dtv walk).
+  FIX: clear the STATIC_TLS bit (qemu/s95b-notls.py — value flip only, structurally safe).
+  Affected+fixed: mesa libEGL/libglapi/swrast/libGLESv2 + TIZEN'S OWN libcrypt-2.30.so (clear too!).
+- mesa libs ALSO needed: verneed node strings GLIBC_2.27/29/34 → GLIBC_2.4 rename + vna_hash
+  recompute + DT_VERSYM=0 (qemu/s95b-verfix.py) — vestigial version nodes validated by ld.so.
+  NOTE: structural ELF surgery (adding/removing dynamic TAGS) = toxic, ld.so segfaults; only
+  VALUE-level changes (flags, string contents in place, val=0) are safe.
+- All five preloads + env load CLEAN now (appctx+bridge+crypt+EGL+glapi).
+- CURRENT FRONTIER: full csfs run segfaults in ld.so during CLR STARTUP (only in dotnet context —
+  plain env with same preloads passes); shim-only run (no GL preloads) = NRE at NUICoreBackend.Run
+  with ZERO DALi/EGL log lines (pre-mesa it logged MALI GLES failures = it got further BEFORE).
+  Both need: DALi-level tracing (DALI env logging / LD_DEBUG on binder) next session.
+- shared-glapi CANNOT be disabled in mesa 21 (EGL requires it) — the EGL+glapi STATIC_TLS combo
+  was the loader bug, solved by the flag clear, not by lib merging.
