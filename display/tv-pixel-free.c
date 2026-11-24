@@ -31,6 +31,7 @@ static void loghex(const char *pre, unsigned plen, long v) {
     b[10]='\n';
     wlog(b, 11);
 }
+static void realloc_buf(int w, int h);
 static void *xmmap_anon(unsigned len) {
     return (void *)_sys6(SYS_mmap, 0, len, 3, 0x22, -1, 0); /* PROT_RW|MAP_PRIVATE|ANON */
 }
@@ -47,13 +48,17 @@ static struct xdg_surface *xsurf;
 static struct xdg_toplevel *top;
 static u32 *pix;
 static int running = 1, configured = 0;
+static int cfg_w = 0, cfg_h = 0;
+static struct wl_shm_pool *g_pool;
+static struct wl_buffer *g_buf;
+static int g_fd = 0;
 
 static int xstrcmp(const char *a, const char *b) {
     while (*a && *a == *b) { a++; b++; }
     return (unsigned char)*a - (unsigned char)*b;
 }
 static void reg_global(void *d, struct wl_registry *r, u32 name, const char *iface, u32 v) {
-    if (!xstrcmp(iface, "wl_compositor")) comp = wl_registry_bind(r, name, &wl_compositor_interface, 1);
+    if (!xstrcmp(iface, "wl_compositor")) comp = wl_registry_bind(r, name, &wl_compositor_interface, 4);
     else if (!xstrcmp(iface, "wl_shm")) shm = wl_registry_bind(r, name, &wl_shm_interface, 1);
     else if (!xstrcmp(iface, "xdg_wm_base")) wm_base = wl_registry_bind(r, name, &xdg_wm_base_interface, 1);
 }
@@ -61,7 +66,20 @@ static void reg_global_remove(void *d, struct wl_registry *r, u32 name) {}
 static const struct wl_registry_listener reg_l = { reg_global, reg_global_remove };
 static void xdg_configure(void *d, struct xdg_surface *s, u32 serial) { xdg_surface_ack_configure(s, serial); configured = 1; }
 static const struct xdg_surface_listener xsurf_l = { xdg_configure };
-static void top_configure(void *d, struct xdg_toplevel *t, i32 w, i32 h, struct wl_array *st) {}
+static void realloc_buf(int w, int h) {
+    long size = (long)w * h * 4;
+    _sys3(SYS_ftruncate64, g_fd, 0, size);
+    pix = (u32 *)_sys6(SYS_mmap, 0x50000000, size, 3, 1, g_fd, 0);
+    if ((long)pix < 0 && (long)pix > -4096) { pix = 0; return; }
+    if (g_pool) wl_shm_pool_destroy(g_pool);
+    g_pool = wl_shm_create_pool(shm, g_fd, size);
+    if (g_buf) wl_buffer_destroy(g_buf);
+    g_buf = wl_shm_pool_create_buffer(g_pool, 0, w, h, w * 4, WL_SHM_FORMAT_XRGB8888);
+    loghex("PIXEL: realloc ", 15, (h << 16) | w);
+}
+static void top_configure(void *d, struct xdg_toplevel *t, i32 w, i32 h, struct wl_array *st) {
+    if (w > 0 && h > 0 && (w != cfg_w || h != cfg_h)) { cfg_w = w; cfg_h = h; realloc_buf(w, h); }
+}
 static void top_close(void *d, struct xdg_toplevel *t) { running = 0; }
 static const struct xdg_toplevel_listener top_l = { top_configure, top_close };
 static void wm_ping(void *d, struct xdg_wm_base *b, u32 serial) { xdg_wm_base_pong(b, serial); }
@@ -84,40 +102,35 @@ int main(void) {
     loghex("PIXEL: ftruncate=", 17, ft);
     long sz = _sys3(SYS_lseek, fd, 0, 2);
     loghex("PIXEL: memfd size=", 18, sz);
-    pix = (u32 *)_sys6(SYS_mmap, 0x50000000, (W * H * 4), 3, 1, fd, 0); /* fixed hint */
-    loghex("PIXEL: mmap=", 12, (long)pix);
-    if ((long)pix < 0 && (long)pix > -4096) return 4;
-    pix[0] = 0x11223344;
-    loghex("PIXEL: probe write+read=", 24, pix[0]);
-    pix[W * H - 1] = 0x55667788;
-    loghex("PIXEL: last pixel=", 18, pix[W * H - 1]);
-    struct wl_shm_pool *pool = wl_shm_create_pool(shm, fd, W * H * 4);
-    struct wl_buffer *buf = wl_shm_pool_create_buffer(pool, 0, W, H, W * 4, WL_SHM_FORMAT_XRGB8888);
-    wl_shm_pool_destroy(pool);
-    _sys1(SYS_close, fd);
+    g_fd = fd;
+    cfg_w = W; cfg_h = H;
+    realloc_buf(W, H);
+    if (!pix || !g_buf) { LOG("PIXEL: buffer alloc failed\n"); return 4; }
     surf = wl_compositor_create_surface(comp);
     xsurf = xdg_wm_base_get_xdg_surface(wm_base, surf);
     xdg_surface_add_listener(xsurf, &xsurf_l, NULL);
     top = xdg_surface_get_toplevel(xsurf);
     xdg_toplevel_add_listener(top, &top_l, NULL);
+    xdg_toplevel_set_fullscreen(top, NULL);
     wl_surface_commit(surf);
     LOG("PIXEL: drawing (see VNC)\n");
     int frame = 0;
-    while (running && frame < 20000) {
+    while (running) {
         if (configured) {
             u32 t = frame * 4;
-            for (int y = 0; y < H; y++) {
-                u32 *row = pix + y * W;
-                for (int x = 0; x < W; x++)
+            for (int y = 0; y < cfg_h; y++) {
+                u32 *row = pix + y * cfg_w;
+                for (int x = 0; x < cfg_w; x++)
                     row[x] = 0xFF000000u | (((u32)(x + t) & 0xFF) << 16) | (((u32)(y + t / 2) & 0xFF) << 8) | ((u32)((x ^ y) + t) & 0xFF);
             }
-            wl_surface_attach(surf, buf, 0, 0);
-            wl_surface_damage_buffer(surf, 0, 0, W, H);
+            wl_surface_attach(surf, g_buf, 0, 0);
+            wl_surface_damage_buffer(surf, 0, 0, cfg_w, cfg_h);
             wl_surface_commit(surf);
         }
         wl_display_dispatch(disp);
         sleep16ms();
         frame++;
+        if (frame % 300 == 0) loghex("PIXEL: frames(cfg=", 19, (configured << 24) | (frame & 0xFFFFFF));
     }
     LOG("PIXEL: done\n");
     return 0;

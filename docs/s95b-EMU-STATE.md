@@ -84,3 +84,12 @@ reapply_clean.py (fixed source patcher), patchstatus/patchsysinfo.py (applied), 
   (2) then csfs launches with real context -> NUI wayland connect (WESTON READY) ->
   (3) DALi requires tizen_policy/wl_tizen globals + EGL: needs weston tizen-protocol plugin +
   software GLES (mesa softpipe cross-build vs Tizen libc, or COREGL/vendor stubs).
+
+## FINAL WORKING DEMO (03:15)
+- tv-pixel-free.c final: compositor bound v4 (damage_buffer needs surface>=4),
+  xdg_toplevel_set_fullscreen, dynamic buffer realloc on configure (resize-safe),
+  uncapped loop. West: weston --backend=x11 --width=1920 --height=1200 --fullscreen on Xvnc :2.
+- Socket delivery: DIRECTORY bind /home/leonbrahams/s95b-wl -> $T/run/user/5001/wl
+  (survives weston restarts/socket renames; per-file binds were fragile).
+- View from anywhere: ssh -f -N -L 6969:localhost:6969 hpdesk && vnc://localhost:6969
+- Result: 88% of the VNC screen filled by the animated ARM-rendered sweep. VERIFIED BY LEON.
