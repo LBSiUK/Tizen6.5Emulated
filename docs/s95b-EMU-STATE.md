@@ -62,3 +62,25 @@ reapply_clean.py (fixed source patcher), patchstatus/patchsysinfo.py (applied), 
   Tizen.NUI.NUICoreBackend.Run — THE DISPLAY GATE: needs a wayland compositor with Tizen
   extensions in the chroot (weston headless + tizen protocol modules, or NUI-native stubs).
 - /run markers now: .amd_ready .wm_ready tvs_ready user/5001/{mbr,source}_service_ready
+
+## SESSION-4 (06:40): REAL PIXELS ON VNC 🎉
+- DISPLAY STACK UP: Xvnc :2 (port 6969, Leon's existing VNC) hosts weston 13 (x11 backend,
+  XDG_RUNTIME_DIR=/home/leonbrahams/s95b-wl -> socket wayland-1) — scripts/s95b-display-up.sh
+  (restarts weston if socket gone, bind-mounts socket into chroot /run/user/5001/wayland-1).
+- display/tv-pixel-free.c: FREESTANDING ARM wayland client (wl_shm + xdg_shell, raw ARM syscalls,
+  _start, no libc — links only tree's libwayland-client/libffi/libdlog-stub; build via
+  display/s95b-build-free.sh against wayland-1.18 headers: /tmp/wayland-1.18.0 + /tmp/wl118).
+  PROVEN: 1280x720 animated RGB sweep rendering via qemu -> TV libwayland -> weston -> VNC.
+  Gotchas burned in: ARM 64-bit syscall args are hi:lo reg pairs (ftruncate64 = r3:r2!),
+  memfd_create needs a real name ptr, host wayland headers must match tree's 1.18 era.
+- SERVICE STACK: dbus-daemon runs in chroot (needed cynara-ASYNC stubs: cynara_async_* added to
+  libcynara-client-async — decision=2/ALLOW via check_cache short-circuit). pkgmgr-server boots,
+  registers org.tizen.pkgmgr on the bus, IDLE-EXITS (dbus-activation style) -> scripts/s95b-respawn.sh
+  respawner. aul_test launch works end-to-end: amd gets APP_START but rejects csfs because its
+  app_info chunk (uid 5001) never populates — amd's pkgmgrinfo scan path still unserved
+  (needs pkgmgr-server query serving or a pkgmgrinfo-usr stub). sidebar's OWN pkgmgrinfo direct-DB
+  access works (reads /opt/dbspace/.pkgmgr_parser.db — csfs IS installed: tpk/uiapp/dotnet-inhouse).
+- NEXT for the app UI: (1) amd app_info population (pkgmgr-server query path or stub),
+  (2) then csfs launches with real context -> NUI wayland connect (WESTON READY) ->
+  (3) DALi requires tizen_policy/wl_tizen globals + EGL: needs weston tizen-protocol plugin +
+  software GLES (mesa softpipe cross-build vs Tizen libc, or COREGL/vendor stubs).
