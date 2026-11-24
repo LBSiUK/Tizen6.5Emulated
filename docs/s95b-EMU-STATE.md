@@ -106,3 +106,25 @@ for hours (pkgmgr-server idle-exits). Needs power-cycle. POST-REBOOT SEQUENCE (o
       falling back to direct DB — the bus made queries WORSE)
   5. pending diagnosis: freestanding libpkgmgr-info tester (tv-pkgtest.c) SIGILLs in a lib ctor
      under QEMU_CPU=max — rerun/decode when box is back
+
+## SESSION-5 (20:00): SOFTWARE GL CHAIN COMPLETE
+- /tmp on hpdesk was WIPED at 10:19 (OOM aftermath) — ALL state now lives in ~/s95b-build (SURVIVES).
+  qemu+wayland+mesa trees rebuilt there; qemuenv venv + s95b-scripts + patches in ~.
+- MOUNTS DIED TOO (no reboot needed, namespace cleanup): scripts/s95b-remount.sh restores all 7 binds.
+- pkginfo-server (/usr/bin/pkginfo-server, unit pkgmgr-info.service) = the REAL query service
+  (socket /run/pkgmgr-info-server, 0666). NOT dbus, NOT pkgmgr-server (that one = install requests only,
+  idle-exits). amd's pkgmgr_client Listen needs dbus+pkgmgr-server alive; queries go to pkginfo-server.
+- APP CONTEXT SOLVED: LD_PRELOAD /usr/lib/libappctx-shim.so (overrides aul_app_get_appid_bypid,
+  reads APPCTX_APPID env) — csfs passes NUIApp init, reaches WINDOW CREATION.
+- MALI EGL replaced by MESA 21.3.9 softpipe (mesa/build-mesa.sh): cross armv7, platforms=wayland,
+  gallium=swrast, dri-drivers=[], llvm off. CRITICAL LINK RECIPE (or DllNotFound/GLIBC_2.34):
+  explicit Tizen libs on link line (libc.so.6 libpthread.so.0 libdl.so.2 libm.so.6 librt.so.1
+  libstdc++.so.6) + time64shim.o + -Wl,-Bstatic -latomic -Wl,-Bdynamic + -static-libgcc.
+  System wayland-scanner REPLACED by our 1.18 build (/usr/local/bin + symlink over /usr/bin).
+  Tree pc files: ~/s95b-build/pc/{libdrm,expat,zlib,wayland-client,wayland-server}.pc + unversioned
+  .so dev symlinks in tree. Deployed: libEGL/GLESv2/glapi/dri+swrast_dri (mali-bak backups kept).
+  RUNTIME: LD_PRELOAD libtime64bridge.so (bridges __*_time64 → 32-bit calls) + LIBGL_DRIVERS_PATH=/usr/lib/dri
+  GALLIUM_DRIVER=softpipe. DEVERSIONING ELF SURGERY = TOXIC (ld.so segfault) — do NOT use; clean linking only.
+- csfs now: context → NUIApp → wm_ready consumed → DALi binder+GL LOAD → crash in ld.so (pc 0x4100cd2c)
+  right after libsecurity-privilege-manager/libboost_regex/libcrypt-2.30 load (NUI window creation path).
+  NEXT: decode that loader fault (gdbstub on ld.so offset 0xcd2c; check ctor of privilege-manager).
