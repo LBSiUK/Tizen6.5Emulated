@@ -93,3 +93,16 @@ reapply_clean.py (fixed source patcher), patchstatus/patchsysinfo.py (applied), 
   (survives weston restarts/socket renames; per-file binds were fragile).
 - View from anywhere: ssh -f -N -L 6969:localhost:6969 hpdesk && vnc://localhost:6969
 - Result: 88% of the VNC screen filled by the animated ARM-rendered sweep. VERIFIED BY LEON.
+
+## OUTAGE NOTE (03:4x)
+hpdesk wedged (OOM): scripts/s95b-respawn.sh while-true loop spawned ~200MB qemu every second
+for hours (pkgmgr-server idle-exits). Needs power-cycle. POST-REBOOT SEQUENCE (one command):
+  1. ssh works again
+  2. bash scripts/s95b-recover.sh   (kills strays, restarts weston+demo for VNC)
+  3. mounts: chroot binds died with reboot -> re-run chroot_run.sh mounts + /run markers +
+     opt/usr symlinks persist on disk; /dev/shm mkdir again; socket dir-bind via recover script
+  4. NO respawn loop — pkgmgr-server/dbus stay OFF unless a test needs them
+     (finding: with dbus+pkgmgr-server up, libpkgmgr-info gdbus queries HANG instead of
+      falling back to direct DB — the bus made queries WORSE)
+  5. pending diagnosis: freestanding libpkgmgr-info tester (tv-pkgtest.c) SIGILLs in a lib ctor
+     under QEMU_CPU=max — rerun/decode when box is back
