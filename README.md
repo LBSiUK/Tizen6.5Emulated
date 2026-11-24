@@ -15,9 +15,16 @@ Companion work:
 CLR boot → CoBA.Initialize → 34 components → newhome resource loading → UI construction
 ```
 
-The sidebar now survives 4+ minute runs with zero crashes. The remaining gates are TV
-services (`amd` app-manager daemon — which itself boots under the same qemu and creates
-`/run/aul/daemons/.amd-sock`) and the display stack (NUI/Wayland).
+Three real TV processes now run **concurrently** under qemu on x86-64 and talk to each
+other over the TV's own IPC:
+
+- `amd` (app-manager daemon) — boots unmodified, serves `/run/aul/daemons/.amd-sock`
+- `HomeSidebar` — boots through all 34 components, speaks 22+ AUL requests to amd
+- `csfs` (content-store app) — boots after a 22-assembly surgical stage, waits for the
+  window manager, then dies in `Tizen.NUI.NUICoreBackend.Run` — the **display gate**
+
+Remaining frontier: a Wayland compositor with Tizen extensions inside the chroot, and
+amd's app-info backend (stub `libpkgmgr-client.so`).
 
 ## Layout
 

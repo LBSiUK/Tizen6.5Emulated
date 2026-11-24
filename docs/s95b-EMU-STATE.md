@@ -49,3 +49,16 @@ Tizen.TV.Application.dll and mmap2'd it PROT_READ|MAP_SHARED (metadata view).
 
 ## Old session scripts in ~ (root-owned relay of yesterday): reapply_all.sh (BROKEN python),
 reapply_clean.py (fixed source patcher), patchstatus/patchsysinfo.py (applied), buildqemu2.sh.
+
+## SESSION-3 (04:00): multi-process TV
+- amd RUNS under qemu (real binary): creates /run/aul/daemons/.amd-sock; needs /run/aul/{dbspace,apps,log}.
+  Launch: nohup setsid chroot $T env QEMU_CPU=max /q9/qemu-arm-patched /usr/bin/amd (see scripts/s95b-amd2.sh)
+- AUL protocol LIVE: sidebar<->amd exchanged 22+ requests (GET_APPID_BYPID, NOTIFY_START, RPC_PORT_PREPARE_STUB...).
+  amd's app_info failed (pkgmgr_client -> gdbus -> no dbus): next = stub libpkgmgr-client.so.0
+  (amd dlopens it; needs pkgmgr_client_new/free/listen*/set_status_type + pkgmgrinfo_* ~70 fns).
+- Sidebar terminate cause: viewdb IPCProxy -> RPCPort.Proxy.Connect("com.samsung.tv.csfs","DGP_STUB") —
+  sibling app csfs must RUN. csfs boots under qemu after 22-assembly surgical stage (scripts/s95b-walk.sh);
+  then waits /run/.wm_ready (marker), then DIES with NullReferenceException in
+  Tizen.NUI.NUICoreBackend.Run — THE DISPLAY GATE: needs a wayland compositor with Tizen
+  extensions in the chroot (weston headless + tizen protocol modules, or NUI-native stubs).
+- /run markers now: .amd_ready .wm_ready tvs_ready user/5001/{mbr,source}_service_ready
