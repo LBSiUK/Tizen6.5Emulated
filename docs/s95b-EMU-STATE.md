@@ -191,3 +191,23 @@ for hours (pkgmgr-server idle-exits). Needs power-cycle. POST-REBOOT SEQUENCE (o
   shims + framework symlinks, runs csfs, prints TIZEN-UNCAUGHT + GL lines).
 - Note: everything is being copied to hpdesk2 (`leonb@192.168.0.78`, NOPASSWD sudo)
   per Leon; scripts now use `$HOME` so they work on both boxes.
+
+## SESSION-8 (2026-11-25 00:3x): MOVING OFF hpdesk → hpdesk2 (leonb@192.168.0.78)
+- Leon: hpdesk is being retired — **nothing may run or live there any more**; Mac or
+  hpdesk2 only.  Migration = one `tar` stream hpdesk → hpdesk2 (6.5 GB incl. the
+  build tree); scripts take `T`/`TREE`/`WL` from the environment and resolve the
+  user home from `SUDO_USER`, so they work as `leonbrahams` or `leonb`.
+- **Do not tar the tree with its mounts live.** The first attempt archived
+  `root/proc/kcore` (4.7 GB of hpdesk RAM) and followed `root/usr/gnemul/qemu-arm`
+  (a bind of the tree onto itself = infinite loop). Exclude:
+  `root/{proc,sys,dev,tmp,run,opt}` and `root/usr/gnemul`. `root/opt` is the bind
+  of the *sibling* `s95b-tree/opt`, which the archive already contains.
+- hpdesk2 has **no compositor**: `scripts/s95b-display-up.sh` brings up
+  `Xvfb :98` + `weston --backend=x11 --socket=wayland-1` with
+  `XDG_RUNTIME_DIR=/tmp/s95b-wl-host` (the dir `s95b-csfs-gl.sh` binds to
+  `/run/user/5001/wl`).  Westeton's headless backend has no seat and DALi dies
+  with `WaylandInput`; the x11 backend always advertises keyboard+pointer.
+  `:99` was already taken on hpdesk2 by an unresponsive Xvfb — hence `:98`, and
+  the script refuses to continue unless `xdpyinfo` answers.
+- Screenshots: `DISPLAY=:98 import -window root /tmp/shot.png` (ImageMagick is
+  installed on hpdesk2).
