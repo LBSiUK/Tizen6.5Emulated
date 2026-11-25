@@ -5,14 +5,16 @@
 # Needs root (chroot + bind mounts).  Weston must already be up; WL is the
 # host directory holding its socket.
 exec 2>&1
-T=${T:-$HOME/s95b-tree/root}
+UH=$(getent passwd "${SUDO_USER:-$USER}" | cut -d: -f6)
+T=${T:-$UH/s95b-tree/root}
+TREE=${TREE:-$UH/s95b-tree}
 WL=${WL:-/tmp/s95b-wl-host}
 LOG=${LOG:-/tmp/csfs-gl.log}
 PRE=${PRE:-"/usr/lib/libappctx-shim.so:/usr/lib/libtime64bridge.so:/usr/lib/libglibcxx-assert.so:/usr/lib/libisoc23.so:/usr/lib/libEGL.so.1:/usr/lib/libglapi.so.0"}
 
 pkill -f "[q]9/qemu-arm-patched" 2>/dev/null
 mkdir -p $T/opt $T/proc $T/dev $T/tmp $T/usr/gnemul/qemu-arm $T/run/user/5001/wl
-mountpoint -q $T/opt || mount --bind ${TREE:-$HOME/s95b-tree}/opt $T/opt
+mountpoint -q $T/opt || mount --bind "$TREE/opt" $T/opt
 mountpoint -q $T/proc || mount -t proc proc $T/proc
 mountpoint -q $T/dev || mount --bind /dev $T/dev
 mountpoint -q $T/tmp || mount -t tmpfs tmpfs $T/tmp
@@ -42,7 +44,7 @@ timeout ${RUNSECS:-180} chroot $T /usr/bin/env \
   LD_PRELOAD="$PRE" APPCTX_APPID=com.samsung.tv.csfs \
   XDG_RUNTIME_DIR=/run/user/5001/wl WAYLAND_DISPLAY=wayland-1 \
   LIBGL_DRIVERS_PATH=/usr/lib/dri GALLIUM_DRIVER=softpipe LIBGL_DEBUG=verbose \
-  EGL_LOG_LEVEL=debug \
+  EGL_LOG_LEVEL=debug WAYLAND_DEBUG=${WAYLAND_DEBUG:-0} \
   /q9/qemu-arm-patched /usr/bin/dotnet \
   /usr/apps/com.samsung.tv.csfs/bin/csfs.dll --appType inhouse --standalone \
   > "$LOG" 2>&1
