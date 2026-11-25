@@ -45,7 +45,7 @@ timeout ${RUNSECS:-180} chroot $T /usr/bin/env \
   XDG_RUNTIME_DIR=/run/user/5001/wl WAYLAND_DISPLAY=wayland-1 \
   LIBGL_DRIVERS_PATH=/usr/lib/dri GALLIUM_DRIVER=softpipe LIBGL_DEBUG=verbose \
   EGL_LOG_LEVEL=debug WAYLAND_DEBUG=${WAYLAND_DEBUG:-0} \
-  /q9/qemu-arm-patched /usr/bin/dotnet \
+  /q9/qemu-arm-patched ${QEMU_EXTRA:-} /usr/bin/dotnet \
   /usr/apps/com.samsung.tv.csfs/bin/csfs.dll --appType inhouse --standalone \
   > "$LOG" 2>&1
 echo "rc=$?  lines=$(wc -l < "$LOG")  log=$LOG"
