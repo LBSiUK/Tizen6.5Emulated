@@ -145,3 +145,49 @@ for hours (pkgmgr-server idle-exits). Needs power-cycle. POST-REBOOT SEQUENCE (o
   Both need: DALi-level tracing (DALI env logging / LD_DEBUG on binder) next session.
 - shared-glapi CANNOT be disabled in mesa 21 (EGL requires it) — the EGL+glapi STATIC_TLS combo
   was the loader bug, solved by the flag clear, not by lib merging.
+
+## SESSION-7 (2026-11-25 00:1x): THE LOADER BUG DECODED — EGL UP, UI BINARY REACHES ITS OWN UI CODE
+- **ROOT CAUSE of the ld.so+0xcd2c crash (blocked sessions 5-6):** glibc's
+  `elf_machine_rel()` does `ndx = D_PTR(l, l_info[DT_VERSYM])[...] & 0x7fff; version = &l->l_versions[ndx];`.
+  Earlier sessions zeroed `DT_VERSYM` and overwrote `DT_VERNEED` with two junk
+  `DT_FLAGS(0)` entries to defeat version validation. Result: `D_PTR` → `l_addr+0`,
+  so the loader reads the library's ELF *header* as a version table (0x457f, 0x464c ...),
+  gets a nonsense index (0x7558), and `l_versions` is NULL because
+  `_dl_check_map_versions()` never ran (no VERNEED) → `ldr r2,[r3,#4]` at NULL+16.
+  The "STATIC_TLS fix" in session 6 was a red herring: clearing DT_FLAGS changed
+  nothing.
+- **FIX (qemu/s95b-elfrepair.py, value-level only, idempotent):** restore
+  `DT_VERSYM` = vaddr of `.gnu.version`, reuse the two junk `DT_FLAGS(0)` slots as
+  `DT_VERNEED`/`DT_VERNEEDNUM`, and recompute every `Vernaux.vna_hash` from its own
+  name (s95b-verfix.py had set them all to hash("GLIBC_2.4"), which ld.so reports as
+  "version `GLIBC_2.8' not found" even though the TV's libc defines it).
+  Applied to libEGL, libGLESv2, libglapi, swrast_dri → **they load**.
+- **swrast was linked against the HOST's glibc** (not the tree's): it needed
+  libatomic.so.1 (copied from Debian armel), `GLIBCXX_3.4.30`, `GLIBC_2.32/2.38`,
+  `GCC_3.5`. Fixed for now with qemu/s95b-verneed-rename.py retags
+  (GLIBCXX_3.4.30→3.4.27, GLIBC_2.32/2.38→2.30, GCC_3.5→3.4) plus two shims built
+  into the tree: libglibcxx-assert.so (`std::__glibcxx_assert_fail`) and
+  libisoc23.so (`__isoc23_*` + `__shmctl64` → classic names, tail-branch so
+  varargs survive). **Debt: rebuild mesa against the tree properly.**
+- **RESULT — the display gate is OPEN:** csfs now does NUIApp → DALi adaptor →
+  `Window Show() WinId 1` → mesa softpipe dlopen → DRI extensions → **EGL
+  initialised (full extension list)**, `wl_surface_commit` over weston, surface
+  1920x1200, ecore_wl2 input keyboard-repeat set.
+- Next blockers, in order met:
+  1. `System.IO.FileNotFoundException: Tizen.TV.FLUX.Component.Extension` — a bare
+     `dotnet csfs.dll` has no framework probe dir. `scripts/s95b-csfs-gl.sh` now
+     symlinks `/usr/share/dotnet.tizen/framework/*.dll` into the app's bin (same
+     layout sidebar's bin has).
+  2. `InvalidOperationException: Failed to InitializeDaliWindow, Error type:
+     WaylandInput` with weston **headless** (no seat). Fixed by running weston on
+     the **x11 backend against Xvnc :2** (scripts note: `DISPLAY=:2
+     XAUTHORITY=~/.Xauthority weston --backend=x11 --width=1920 --height=1200
+     --fullscreen --socket=wayland-1`), which gives a real seat.
+  3. **CURRENT FRONTIER:** `InvalidOperationException: Failed to initialize
+     KeyRouter` at `Tizen.TV.FLUX.TVWindow.KeyRouter.InitKeyRouter()` — TV-specific
+     key routing, after SourceManager/PSI lists are built. Needs a look at what
+     KeyRouter binds to (tizen input/`/dev/input`, `tizen_policy`, or wl_tizen seat).
+- Run book: `sudo bash scripts/s95b-csfs-gl.sh` (mounts 7 binds, marks /run, stages
+  shims + framework symlinks, runs csfs, prints TIZEN-UNCAUGHT + GL lines).
+- Note: everything is being copied to hpdesk2 (`leonb@192.168.0.78`, NOPASSWD sudo)
+  per Leon; scripts now use `$HOME` so they work on both boxes.
