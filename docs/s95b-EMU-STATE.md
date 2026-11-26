@@ -211,3 +211,34 @@ for hours (pkgmgr-server idle-exits). Needs power-cycle. POST-REBOOT SEQUENCE (o
   the script refuses to continue unless `xdpyinfo` answers.
 - Screenshots: `DISPLAY=:98 import -window root /tmp/shot.png` (ImageMagick is
   installed on hpdesk2).
+
+## SESSION-9 (2026-11-25 23:4x – 2026-11-26 00:1x): KEY ROUTER GATE PASSED — REAL UI TREE BUILT — DB UNBLOCKED
+- **KeyRouter: SOLVED.** weston runs with `--modules=tizen-keyrouter.so,tizen-tv-keyrouter.so`
+  (`scripts/s95b-display-up.sh` adds `MODULES`, default `tizen-keyrouter.so`); weston.log shows
+  the client binding `tizen_keyrouter` v2, and the interposer `libkrshim2.so` logs
+  `[KR2S] KeyRouter_Initialize ok / Reset_KeyList ok / Add_Key ok / Set_KeyList ok /
+  RegisterNONEKey ok`. `Failed to initialize KeyRouter` is gone.
+  Module source: `display/weston-tizen/` (protocol xml + no-op implementation; grab lists are
+  accepted and never routed — input routing is still a later milestone).
+- **`ViewPluginPages` FileNotFound decoded.** csfs ships its plugins in `shared/res/`
+  (`ViewPluginPages.dll`, `ViewPluginFullHomeTiles.dll`) but the loader only probes `bin/`.
+  **Copy** them: a symlink whose target is a HOST-absolute path is invisible inside the chroot
+  and reproduces the same FileNotFound.
+- **Result: the UI tree is built.** `FullView.UpdateRootLayout` system/partial/sidebar layouts,
+  `HideSideBar`, `ChangeSidebarOpacity`, DALi `Window (0x...) WinId (1) Show(): visible = 1`.
+  No crash, no stack overflow; the run stays alive until killed.
+- **DB: `Unable to load shared library 'sqlite3'`.** Tizen ships only `libsqlite3.so.0`;
+  .NET probes `libsqlite3.so`. Fix in the tree: `/usr/lib/libsqlite3.so -> libsqlite3.so.0`.
+  The sidebar DB `integrity_check` then passes and the `DBErrorAppControl` relaunch loop
+  (it tries to start `com.samsung.tv.home.sidebar` over AUL every few ms and the socket is
+  absent) stops.
+- **New wait:** `IPCManager.WaitExistsFilePath` blocks on
+  `/home/owner/apps_rw/com.samsung.tv.home.sidebar/shared/trusted/db_ready`.
+  Either touch the marker (emulation shim) or run sidebar so it creates it.
+- Runner: `scripts/s95b-csfs-run.sh` (mounts, shims, plugin copies, SQLite symlink, screenshots).
+  The screen so far still shows weston's desktop-shell background: no app frame has been
+  captured yet.
+- **Still only on hpdesk2 (bring into the repo when the box is reachable):**
+  the source of `/tmp/libkrshim2.so` and of `~/tk2/tizen-tv-keyrouter.so`.
+- 2026-11-26 12:40: hpdesk2 (192.168.0.78) unreachable — the Mac is on 10.1.119.194 and
+  hpdesk2 is not on the tailnet. Next run needs the Brighton LAN.

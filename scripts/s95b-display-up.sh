@@ -24,14 +24,19 @@ if ! xok; then
   xok && echo "started Xvfb $DISP" || { echo "FATAL: Xvfb $DISP not responding (try DISP=:97)"; exit 1; }
 fi
 
+# MODULES names weston modules to load (comma separated, e.g. tizen-keyrouter.so).
+# The Tizen key router global comes from display/weston-tizen/ -- without it
+# DALi TV apps die in KeyRouter.InitKeyRouter().
+MODULES=${MODULES:-tizen-keyrouter.so}
 if ! pgrep -f "weston .*--socket=$SOCK" >/dev/null; then
   pkill -f "weston --backend" 2>/dev/null
   rm -f "$WL/$SOCK" "$WL/$SOCK.lock"
   DISPLAY=$DISP XDG_RUNTIME_DIR=$WL nohup weston \
     --backend=x11 --width=${GEOM%%x*} --height=$(echo "$GEOM" | cut -dx -f2) \
-    --socket=$SOCK --idle-time=0 >/tmp/weston.log 2>&1 &
+    --socket=$SOCK --idle-time=0 ${MODULES:+--modules=$MODULES} \
+    >/tmp/weston.log 2>&1 &
   sleep 3
-  echo "started weston on $DISP, socket $WL/$SOCK"
+  echo "started weston on $DISP, socket $WL/$SOCK, modules=${MODULES:-none}"
 fi
 
 ls -l "$WL" | tail -3
