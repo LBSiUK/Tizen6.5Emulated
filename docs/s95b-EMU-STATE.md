@@ -234,10 +234,13 @@ for hours (pkgmgr-server idle-exits). Needs power-cycle. POST-REBOOT SEQUENCE (o
   absent) stops.
 - **New wait:** `IPCManager.WaitExistsFilePath` blocks on
   `/home/owner/apps_rw/com.samsung.tv.home.sidebar/shared/trusted/db_ready`.
-  Either touch the marker (emulation shim) or run sidebar so it creates it.
+  Either touch the marker (emulation shim: `MARK_DB_READY=1 scripts/s95b-csfs-run.sh`) or run
+  sidebar so it creates it.
 - Runner: `scripts/s95b-csfs-run.sh` (mounts, shims, plugin copies, SQLite symlink, screenshots).
   The screen so far still shows weston's desktop-shell background: no app frame has been
   captured yet.
+- **Open A/B:** whether `libkrshim2.so` is still needed now that weston advertises the real
+  global (run once without it in `PRE`) — if the module alone passes KeyRouter, the shim can go.
 - **Still only on hpdesk2 (bring into the repo when the box is reachable):**
   the source of `/tmp/libkrshim2.so` and of `~/tk2/tizen-tv-keyrouter.so`.
 - 2026-11-26 12:40: hpdesk2 (192.168.0.78) unreachable — the Mac is on 10.1.119.194 and

@@ -53,6 +53,13 @@ mount --bind "$WL" "$T/run/user/5001/wl" || echo "WARN: wayland bind failed"
 touch $T/run/.amd_ready $T/run/.wm_ready $T/run/tvs_ready \
       $T/run/user/5001/mbr_service_ready $T/run/user/5001/source_service_ready
 
+# csfs blocks in IPCManager.WaitExistsFilePath until sidebar writes this marker.
+# MARK_DB_READY=1 fakes it (the DB itself came off the TV, so its content is real).
+if [ "${MARK_DB_READY:-0}" = 1 ]; then
+  d=$T/home/owner/apps_rw/com.samsung.tv.home.sidebar/shared/trusted
+  mkdir -p "$d" && touch "$d/db_ready" && echo "marked db_ready: $d/db_ready"
+fi
+
 cd $T
 timeout -k 5 "$RUNSECS" chroot $T /usr/bin/env \
   QEMU_CPU=max DOTNET_ROOT=/usr/share/dotnet \
