@@ -244,4 +244,6 @@ for hours (pkgmgr-server idle-exits). Needs power-cycle. POST-REBOOT SEQUENCE (o
 - **Still only on hpdesk2 (bring into the repo when the box is reachable):**
   the source of `/tmp/libkrshim2.so` and of `~/tk2/tizen-tv-keyrouter.so`.
 - 2026-11-26 12:40: hpdesk2 (192.168.0.78) unreachable — the Mac is on 10.1.119.194 and
-  hpdesk2 is not on the tailnet. Next run needs the Brighton LAN.
+  hpdesk2 is not on the tailnet. **On hold by Leon's choice (2026-11-26 13:15): wait until
+  we're back on the Brighton LAN.** Resume with `MARK_DB_READY=1 sudo -E bash
+  scripts/s95b-csfs-run.sh` on hpdesk2, and bring the two missing sources into the repo first.
